@@ -1,6 +1,10 @@
-#![allow(dead_code, non_snake_case)]
+use rand::Rng;
 
-pub const CHIP8_FONTSET: [u8; 80] = [
+const CHIP8_SCREEN_WIDTH: usize = 64;
+const CHIP8_SCREEN_HEIGHT: usize = 32;
+const CHIP8_RAM: usize = 4096;
+const CHIP8_START_ADDR: usize = 0x200;
+const CHIP8_FONTSET: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
     0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
@@ -33,9 +37,6 @@ impl PC {
         PC::Next
     }
 }
-const CHIP8_SCREEN_WIDTH: usize = 64;
-const CHIP8_SCREEN_HEIGHT: usize = 32;
-const CHIP8_RAM: usize = 4096;
 
 pub struct Chip8 {
     ram: [u8; CHIP8_RAM],
@@ -48,7 +49,7 @@ pub struct Chip8 {
     delay_timer: u8,
     sound_timer: u8,
     stack: [usize; 16],
-    key: [u8; 16],
+    keypad: [bool; 16],
 }
 
 impl Chip8 {
@@ -60,7 +61,7 @@ impl Chip8 {
             .for_each(|(i, font)| ram[i] = *font);
 
         Self {
-            pc: 0x200,
+            pc: CHIP8_START_ADDR,
             opcode: 0,
             i: 0,
             sp: 0,
@@ -70,11 +71,32 @@ impl Chip8 {
             delay_timer: 0,
             sound_timer: 0,
             stack: [0; 16],
-            key: [0; 16],
+            keypad: [false; 16],
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn load(&mut self, data: &[u8]) {
+        for (i, &byte) in data.iter().enumerate() {
+            if CHIP8_START_ADDR + 1 < 4096 {
+                self.ram[CHIP8_START_ADDR + i] = byte;
+            } else {
+                break;
+            }
+        }
+    }
+
+    pub fn cycle(&mut self, keypad: [bool; 16]) {
+        self.keypad = keypad;
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1
+        }
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1
+        }
+        self.exec()
+    }
+
+    pub fn exec(&mut self) {
         let opcode: u16 = self.get_opcode();
         let (i, x, y, n, kk, nnn) = Self::inst_decode(&opcode);
 
@@ -232,16 +254,17 @@ impl Chip8 {
     // Set Vx = Vy.
     // Stores the value of register Vy in register Vx.
     fn inst_8xy0(&mut self, x: u8, y: u8) -> PC {
-        todo!()
+        self.v[x as usize] = self.v[y as usize];
+        PC::Next
     }
 
-    // 8xy1 - OR Vx, Vy
-    // Set Vx = Vx OR Vy.
-    // Performs a bitwise OR on the values of Vx and Vy, then stores the result in Vx.
-    // A bitwise OR compares the corrseponding bits from two values,
-    // and if either bit is 1, then the same bit in the result is also 1. Otherwise, it is 0.
+    // Set Vx = Vx XOR Vy.
+    // Performs a bitwise exclusive OR on the values of Vx and Vy, then stores the result in Vx.
+    // An exclusive OR compares the corrseponding bits from two values,
+    // and if the bits are not both the same, then the corresponding bit in the result is set to 1. Otherwise, it is 0.
     fn inst_8xy1(&mut self, x: u8, y: u8) -> PC {
-        todo!()
+        self.v[x as usize] |= self.v[y as usize];
+        PC::Next
     }
 
     // 8xy2 - AND Vx, Vy
@@ -250,94 +273,227 @@ impl Chip8 {
     // A bitwise AND compares the corrseponding bits from two values,
     // and if both bits are 1, then the same bit in the result is also 1. Otherwise, it is 0.
     fn inst_8xy2(&mut self, x: u8, y: u8) -> PC {
-        todo!()
+        self.v[x as usize] &= self.v[y as usize];
+        PC::Next
     }
 
+    // 8xy3 - XOR Vx, Vy
+    // Set Vx = Vx XOR Vy.
+    // Performs a bitwise exclusive OR on the values of Vx and Vy, then stores the result in Vx.
+    // An exclusive OR compares the corrseponding bits from two values,
+    // and if the bits are not both the same, then the corresponding bit in the result is set to 1. Otherwise, it is 0.
     fn inst_8xy3(&mut self, x: u8, y: u8) -> PC {
-        todo!()
+        self.v[x as usize] ^= self.v[y as usize];
+        PC::Next
     }
 
+    // 8xy4 - ADD Vx, Vy
+    // Set Vx = Vx + Vy, set VF = carry.
+    // The values of Vx and Vy are added together. If the result is greater than 8 bits (i.e., > 255,) VF is set to 1, otherwise 0.
+    // Only the lowest 8 bits of the result are kept, and stored in Vx.
     fn inst_8xy4(&mut self, x: u8, y: u8) -> PC {
-        todo!()
+        self.v[x as usize] += self.v[y as usize];
+        self.v[0x0F] = if self.v[x as usize] > 0xFF { 1 } else { 0 };
+        PC::Next
     }
 
+    // 8xy5 - SUB Vx, Vy
+    // Set Vx = Vx - Vy, set VF = NOT borrow.
+    // If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is subtracted from Vx, and the results stored in Vx.
     fn inst_8xy5(&mut self, x: u8, y: u8) -> PC {
-        todo!()
+        self.v[0x0F] = if self.v[x as usize] > self.v[y as usize] {
+            1
+        } else {
+            0
+        };
+        self.v[x as usize] -= self.v[y as usize];
+        PC::Next
     }
 
+    // 8xy6 - SHR Vx {, Vy}
+    // Set Vx = Vx SHR 1.
+    // If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0. Then Vx is divided by 2.
     fn inst_8x06(&mut self, x: u8) -> PC {
-        todo!()
+        self.v[0x0F] = self.v[x as usize] & 1;
+        self.v[x as usize] >>= 1;
+        PC::Next
     }
 
+    // 8xy7 - SUBN Vx, Vy
+    // Set Vx = Vy - Vx, set VF = NOT borrow.
+    // If Vy > Vx, then VF is set to 1, otherwise 0. Then Vx is subtracted from Vy, and the results stored in Vx.
     fn inst_8xy7(&mut self, x: u8, y: u8) -> PC {
-        todo!()
+        self.v[0x0F] = if self.v[y as usize] > self.v[x as usize] {
+            1
+        } else {
+            0
+        };
+        self.v[x as usize] = self.v[y as usize] - self.v[x as usize];
+        PC::Next
     }
 
+    // 8xyE - SHL Vx {, Vy}
+    // Set Vx = Vx SHL 1.
+    // If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is multiplied by 2.
     fn inst_8x0e(&mut self, x: u8) -> PC {
-        todo!()
+        self.v[0x0F] = (self.v[x as usize] & 0b10000000) >> 7;
+        self.v[x as usize] <<= 1;
+        PC::Next
     }
 
+    // 9xy0 - SNE Vx, Vy
+    // Skip next instruction if Vx != Vy.
+    // The values of Vx and Vy are compared, and if they are not equal, the program counter is increased by 2.
     fn inst_9xy0(&mut self, x: u8, y: u8) -> PC {
-        todo!()
+        PC::skip_if(self.v[x as usize] != self.v[y as usize])
     }
 
+    // Annn - LD I, addr
+    // Set I = nnn.
+    // The value of register I is set to nnn.
     fn inst_annn(&mut self, nnn: usize) -> PC {
-        todo!()
+        self.i = nnn;
+        PC::Next
     }
 
+    // Bnnn - JP V0, addr
+    // Jump to location nnn + V0.
+    // The program counter is set to nnn plus the value of V0.
     fn inst_bnnn(&mut self, nnn: usize) -> PC {
-        todo!()
+        PC::Jump((self.v[0] as usize) + nnn)
     }
 
+    // Cxkk - RND Vx, byte
+    // Set Vx = random byte AND kk.
+    // The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk.
+    // The results are stored in Vx. See instruction 8xy2 for more information on AND.
     fn inst_cxkk(&mut self, x: u8, kk: u8) -> PC {
-        todo!()
+        self.v[x as usize] = rand::thread_rng().gen::<u8>();
+        PC::Next
     }
 
+    // Dxyn - DRW Vx, Vy, nibble
+    // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
+    // The interpreter reads n bytes from memory, starting at the address stored in I.
+    // These bytes are then displayed as sprites on screen at coordinates (Vx, Vy). Sprites are XORed onto the existing screen.
+    // If this causes any pixels to be erased, VF is set to 1, otherwise it is set to 0.
+    // If the sprite is positioned so part of it is outside the coordinates of the display, it wraps around to the opposite side of the screen.
+    // See instruction 8xy3 for more information on XOR, and section 2.4, Display, for more information on the Chip-8 screen and sprites.
     fn inst_dxyn(&mut self, x: u8, y: u8, n: u8) -> PC {
-        todo!()
+        self.v[0x0F] = 0;
+        for byte in 0..n as usize {
+            let y = (self.v[y as usize] as usize + byte) % CHIP8_SCREEN_HEIGHT;
+            for bit in 0..8 {
+                let x = (self.v[x as usize] as usize + bit) % CHIP8_SCREEN_WIDTH;
+                let color = (self.ram[self.i + byte] >> (7 - bit)) & 1;
+                self.v[0x0F] |= color & self.screen[y][x];
+                self.screen[y][x] ^= color;
+            }
+        }
+        PC::Next
     }
 
+    // Ex9E - SKP Vx
+    // Skip next instruction if key with the value of Vx is pressed.
+    // Checks the keyboard, and if the key corresponding to the value of Vx is currently in the down position, PC is increased by 2.
     fn inst_ex9e(&mut self, x: u8) -> PC {
-        todo!()
+        PC::skip_if(self.keypad[self.v[x as usize] as usize])
     }
 
+    // ExA1 - SKNP Vx
+    // Skip next instruction if key with the value of Vx is not pressed.
+    // Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position, PC is increased by 2.
     fn inst_exa1(&mut self, x: u8) -> PC {
-        todo!()
+        PC::skip_if(!self.keypad[self.v[x as usize] as usize])
     }
 
+    // Fx07 - LD Vx, DT
+    // Set Vx = delay timer value.
+    // The value of DT is placed into Vx.
     fn inst_fx07(&mut self, x: u8) -> PC {
-        todo!()
+        self.v[x as usize] = self.delay_timer;
+        PC::Next
     }
 
+    // Fx0A - LD Vx, K
+    // Wait for a key press, store the value of the key in Vx.
+    // All execution stops until a key is pressed, then the value of that key is stored in Vx.
     fn inst_fx0a(&mut self, x: u8) -> PC {
-        todo!()
+        let mut i = 0;
+        loop {
+            if self.keypad[i] {
+                self.v[x as usize] = i as u8;
+                break;
+            }
+            i += 1;
+            if i >= self.keypad.len() {
+                i = 0;
+            }
+        }
+        PC::Next
     }
 
+    // Fx15 - LD DT, Vx
+    // Set delay timer = Vx.
+    // DT is set equal to the value of Vx.
     fn inst_fx15(&mut self, x: u8) -> PC {
-        todo!()
+        self.delay_timer = self.v[x as usize];
+        PC::Next
     }
 
+    // Fx18 - LD ST, Vx
+    // Set sound timer = Vx.
+    // ST is set equal to the value of
     fn inst_fx18(&mut self, x: u8) -> PC {
-        todo!()
+        self.sound_timer = self.v[x as usize];
+        PC::Next
     }
 
+    // Fx1E - ADD I, Vx
+    // Set I = I + Vx.
+    // The values of I and Vx are added, and the results are stored in I.
     fn inst_fx1e(&mut self, x: u8) -> PC {
-        todo!()
+        self.i += self.v[x as usize] as usize;
+        PC::Next
     }
 
+    // Fx29 - LD F, Vx
+    // Set I = location of sprite for digit Vx.
+    // The value of I is set to the location for the hexadecimal sprite corresponding to the value of Vx.
+    // See section 2.4, Display, for more information on the Chip-8 hexadecimal font.
     fn inst_fx29(&mut self, x: u8) -> PC {
-        todo!()
+        self.i = (self.v[x as usize] as usize) * 5;
+        PC::Next
     }
 
+    // Fx33 - LD B, Vx
+    // Store BCD representation of Vx in memory locations I, I+1, and I+2.
+    // The interpreter takes the decimal value of Vx, and places the hundreds digit in memory at location in I,
+    // the tens digit at location I+1, and the ones digit at location I+2.
     fn inst_fx33(&mut self, x: u8) -> PC {
-        todo!()
+        self.ram[self.i] = self.v[x as usize] / 100;
+        self.ram[self.i + 1] = self.v[x as usize] % 100 / 10;
+        self.ram[self.i + 2] = self.v[x as usize] % 10;
+        PC::Next
     }
 
+    // Fx55 - LD [I], Vx
+    // Store registers V0 through Vx in memory starting at location I.
+    // The interpreter copies the values of registers V0 through Vx into memory, starting at the address in I.
     fn inst_fx55(&mut self, x: u8) -> PC {
-        todo!()
+        for i in 0..=x as usize {
+            self.ram[self.i + i] = self.v[i];
+        }
+        PC::Next
     }
 
+    // Fx65 - LD Vx, [I]
+    // Read registers V0 through Vx from memory starting at location I.
+    // The interpreter reads values from memory starting at location I into registers V0 through Vx.
     fn inst_fx65(&mut self, x: u8) -> PC {
-        todo!()
+        for i in 0..=x as usize {
+            self.v[i] = self.ram[self.i + i];
+        }
+        PC::Next
     }
 }
