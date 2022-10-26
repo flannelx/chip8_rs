@@ -1,1 +1,1 @@
-mod chip8
+mod chip8;
