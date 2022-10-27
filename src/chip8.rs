@@ -27,6 +27,7 @@ enum PC {
     Next,
     Skip,
     Jump(usize),
+    Halt
 }
 
 impl PC {
@@ -40,12 +41,11 @@ impl PC {
 
 pub struct Chip8 {
     ram: [u8; CHIP8_RAM],
-    opcode: u8,
     v: [u8; 16],
     i: usize,
     pc: usize,
     sp: usize,
-    screen: [[u8; CHIP8_SCREEN_WIDTH]; CHIP8_SCREEN_HEIGHT],
+    pub screen: [[u8; CHIP8_SCREEN_WIDTH]; CHIP8_SCREEN_HEIGHT],
     delay_timer: u8,
     sound_timer: u8,
     stack: [usize; 16],
@@ -62,7 +62,6 @@ impl Chip8 {
 
         Self {
             pc: CHIP8_START_ADDR,
-            opcode: 0,
             i: 0,
             sp: 0,
             ram,
@@ -142,6 +141,7 @@ impl Chip8 {
             PC::Next => self.pc += 2,
             PC::Skip => self.pc += 4,
             PC::Jump(addr) => self.pc = addr,
+            PC::Halt => (),
         }
     }
 
@@ -202,7 +202,7 @@ impl Chip8 {
     // Call subroutine at nnn.
     // The interpreter increments the stack pointer, then puts the current PC on the top of the stack. The PC is then set to nnn.
     fn inst_2nnn(&mut self, nnn: usize) -> PC {
-        self.stack[self.sp] = self.pc;
+        self.stack[self.sp] = self.pc + 2;
         self.sp += 1;
         PC::Jump(nnn)
     }
@@ -246,7 +246,7 @@ impl Chip8 {
     // Set Vx = Vx + kk.
     // Adds the value kk to the value of register Vx, then stores the result in Vx.
     fn inst_7xkk(&mut self, x: u8, kk: u8) -> PC {
-        self.v[x as usize] += kk;
+        self.v[x as usize] = self.v[x as usize].wrapping_add(kk);
         PC::Next
     }
 
@@ -292,8 +292,8 @@ impl Chip8 {
     // The values of Vx and Vy are added together. If the result is greater than 8 bits (i.e., > 255,) VF is set to 1, otherwise 0.
     // Only the lowest 8 bits of the result are kept, and stored in Vx.
     fn inst_8xy4(&mut self, x: u8, y: u8) -> PC {
-        self.v[x as usize] += self.v[y as usize];
-        self.v[0x0F] = if self.v[x as usize] > 0xFF { 1 } else { 0 };
+        self.v[x as usize] = self.v[x as usize].wrapping_add(self.v[y as usize]);
+        self.v[0x0F] = if self.v[x as usize] as u16 > 0xFF as u16 { 1 } else { 0 };
         PC::Next
     }
 
@@ -306,7 +306,7 @@ impl Chip8 {
         } else {
             0
         };
-        self.v[x as usize] -= self.v[y as usize];
+        self.v[x as usize] = self.v[x as usize].wrapping_sub(self.v[y as usize]);
         PC::Next
     }
 
@@ -368,7 +368,7 @@ impl Chip8 {
     // The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk.
     // The results are stored in Vx. See instruction 8xy2 for more information on AND.
     fn inst_cxkk(&mut self, x: u8, kk: u8) -> PC {
-        self.v[x as usize] = rand::thread_rng().gen::<u8>();
+        self.v[x as usize] = rand::thread_rng().gen::<u8>() & kk;
         PC::Next
     }
 
@@ -419,18 +419,12 @@ impl Chip8 {
     // Wait for a key press, store the value of the key in Vx.
     // All execution stops until a key is pressed, then the value of that key is stored in Vx.
     fn inst_fx0a(&mut self, x: u8) -> PC {
-        let mut i = 0;
-        loop {
+        for i in 0..self.keypad.len() {
             if self.keypad[i] {
                 self.v[x as usize] = i as u8;
-                break;
-            }
-            i += 1;
-            if i >= self.keypad.len() {
-                i = 0;
             }
         }
-        PC::Next
+        PC::Halt
     }
 
     // Fx15 - LD DT, Vx
@@ -462,7 +456,7 @@ impl Chip8 {
     // The value of I is set to the location for the hexadecimal sprite corresponding to the value of Vx.
     // See section 2.4, Display, for more information on the Chip-8 hexadecimal font.
     fn inst_fx29(&mut self, x: u8) -> PC {
-        self.i = (self.v[x as usize] as usize) * 5;
+        self.i = (self.v[x as usize] as usize) * 5 + 0x50;
         PC::Next
     }
 
