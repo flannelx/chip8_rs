@@ -102,7 +102,7 @@ impl Chip8 {
             (0x08, _, _, 0x05) => self.inst_8xy5(x, y),
             (0x08, _, _, 0x06) => self.inst_8x06(x),
             (0x08, _, _, 0x07) => self.inst_8xy7(x, y),
-            (0x08, _, _, 0x0e) => self.inst_8x0e(x),
+            (0x08, _, _, 0x0e) => self.inst_8xye(x),
             (0x09, _, _, 0x00) => self.inst_9xy0(x, y),
             (0x0a, _, _, _) => self.inst_annn(nnn),
             (0x0b, _, _, _) => self.inst_bnnn(nnn),
@@ -305,8 +305,8 @@ impl Chip8 {
     // 8xyE - SHL Vx {, Vy}
     // Set Vx = Vx SHL 1.
     // If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is multiplied by 2.
-    fn inst_8x0e(&mut self, x: u8) {
-        self.v[0xF] = (self.v[x as usize] & 0b10000000) >> 7;
+    fn inst_8xye(&mut self, x: u8) {
+        self.v[0xF] = (self.v[x as usize] & 0x80) >> 7;
         self.v[x as usize] <<= 1;
     }
 
