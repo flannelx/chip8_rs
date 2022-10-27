@@ -27,7 +27,7 @@ enum PC {
     Next,
     Skip,
     Jump(usize),
-    Halt
+    Halt,
 }
 
 impl PC {
@@ -293,7 +293,11 @@ impl Chip8 {
     // Only the lowest 8 bits of the result are kept, and stored in Vx.
     fn inst_8xy4(&mut self, x: u8, y: u8) -> PC {
         self.v[x as usize] = self.v[x as usize].wrapping_add(self.v[y as usize]);
-        self.v[0x0F] = if self.v[x as usize] as u16 > 0xFF as u16 { 1 } else { 0 };
+        self.v[0x0F] = if self.v[x as usize] as u16 > 0xFF as u16 {
+            1
+        } else {
+            0
+        };
         PC::Next
     }
 
