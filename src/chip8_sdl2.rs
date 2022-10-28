@@ -75,8 +75,9 @@ impl Chip8Sdl {
     pub fn poll(&mut self) -> Result<(), ()> {
         for event in self.events.poll_iter() {
             //println!("{:?}", event);
-            if let Event::Quit { .. } = event {
-                return Err(());
+            match event {
+                Event::Quit { .. } => return Err(()),
+                _ => (),
             };
         }
 
@@ -88,30 +89,29 @@ impl Chip8Sdl {
             .collect();
 
         //println!("{:?}", keys);
-        for key in keys {
-            let index = match key {
-                Keycode::Num1 => Some(1),
-                Keycode::Num2 => Some(2),
-                Keycode::Num3 => Some(3),
-                Keycode::Num4 => Some(0xc),
-                Keycode::Q => Some(4),
-                Keycode::W => Some(5),
-                Keycode::E => Some(6),
-                Keycode::R => Some(0xd),
-                Keycode::A => Some(7),
-                Keycode::S => Some(8),
-                Keycode::D => Some(9),
-                Keycode::F => Some(0xe),
-                Keycode::Z => Some(0xa),
-                Keycode::X => Some(0),
-                Keycode::C => Some(0xb),
-                Keycode::V => Some(0xf),
-                _ => None,
+        for key in keys.iter() {
+            match key {
+                Keycode::Num1 => self.keys[1] = true,
+                Keycode::Num2 => self.keys[2] = true,
+                Keycode::Num3 => self.keys[3] = true,
+                Keycode::Num4 => self.keys[0xc] = true,
+                Keycode::Q => self.keys[4] = true,
+                Keycode::W => self.keys[5] = true,
+                Keycode::E => self.keys[6] = true,
+                Keycode::R => self.keys[0xd] = true,
+                Keycode::A => self.keys[7] = true,
+                Keycode::S => self.keys[8] = true,
+                Keycode::D => self.keys[9] = true,
+                Keycode::F => self.keys[0xe] = true,
+                Keycode::Z => self.keys[0xa] = true,
+                Keycode::X => self.keys[0] = true,
+                Keycode::C => self.keys[0xb] = true,
+                Keycode::V => self.keys[0xf] = true,
+                _ => (),
             };
-
-            if let Some(i) = index {
-                self.keys[i] = true;
-            }
+        }
+        if keys.len() == 0 {
+            self.keys = [false; 16];
         }
         Ok(())
     }

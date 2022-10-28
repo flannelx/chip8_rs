@@ -1,5 +1,4 @@
 use std::path::Path;
-
 use rand::Rng;
 
 pub const CHIP8_SCREEN_WIDTH: usize = 64;
@@ -44,7 +43,7 @@ impl Chip8 {
         CHIP8_FONTSET
             .iter()
             .enumerate()
-            .for_each(|(i, font)| ram[i+0x50] = *font);
+            .for_each(|(i, font)| ram[i + 0x50] = *font);
 
         Self {
             pc: CHIP8_START_ADDR,
@@ -75,7 +74,7 @@ impl Chip8 {
         if self.sound_timer > 0 {
             self.sound_timer -= 1
         }
-        self.exec()
+        self.exec();
     }
 
     pub fn exec(&mut self) {
@@ -205,7 +204,7 @@ impl Chip8 {
     // Skip next instruction if Vx = Vy.
     // The interpreter compares register Vx to register Vy, and if they are equal, increments the program counter by 2.
     fn inst_5xy0(&mut self, x: u8, y: u8) {
-        if self.v[x as usize] == y {
+        if self.v[x as usize] == self.v[y as usize] {
             self.pc += 2;
         }
     }
@@ -262,12 +261,9 @@ impl Chip8 {
     // The values of Vx and Vy are added together. If the result is greater than 8 bits (i.e., > 255,) VF is set to 1, otherwise 0.
     // Only the lowest 8 bits of the result are kept, and stored in Vx.
     fn inst_8xy4(&mut self, x: u8, y: u8) {
-        self.v[x as usize] = self.v[x as usize].wrapping_add(self.v[y as usize]);
-        self.v[0xF] = if self.v[x as usize] as u16 > 0xFF as u16 {
-            1
-        } else {
-            0
-        };
+        let sum: u16 = self.v[x as usize] as u16 + self.v[y as usize] as u16;
+        self.v[0xF] = if sum > 255 { 1 } else { 0 };
+        self.v[x as usize] = (sum & 0xFF) as u8;
     }
 
     // 8xy5 - SUB Vx, Vy
