@@ -295,7 +295,7 @@ impl Chip8 {
         } else {
             0
         };
-        self.v[x as usize] = self.v[y as usize] - self.v[x as usize];
+        self.v[x as usize] = self.v[y as usize].wrapping_sub(self.v[x as usize]);
     }
 
     // 8xyE - SHL Vx {, Vy}

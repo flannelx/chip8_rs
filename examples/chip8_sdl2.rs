@@ -1,10 +1,11 @@
-use crate::chip8::{Chip8, CHIP8_SCREEN_HEIGHT, CHIP8_SCREEN_WIDTH};
+use chip8_rs::chip8::{Chip8, CHIP8_SCREEN_HEIGHT, CHIP8_SCREEN_WIDTH};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::rect::Rect;
 use sdl2::render::Canvas;
 use sdl2::video::Window;
 use sdl2::{pixels, EventPump};
+use std::env;
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
@@ -124,4 +125,14 @@ impl Chip8Sdl {
             thread::sleep(Duration::from_millis(self.sleep_duration));
         }
     }
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let mut chip8sdl = Chip8Sdl::new(
+        args[1].parse::<u64>().unwrap(),
+        args[2].parse::<u32>().unwrap(),
+        args[3].clone(),
+    );
+    chip8sdl.run();
 }
