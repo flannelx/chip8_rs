@@ -25,7 +25,7 @@ pub const CHIP8_FONTSET: [u8; 80] = [
 ];
 
 pub struct Chip8 {
-    ram: [u8; CHIP8_RAM],
+    pub ram: [u8; CHIP8_RAM],
     v: [u8; 16],
     i: usize,
     pc: usize,
