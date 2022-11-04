@@ -24,6 +24,7 @@ pub const CHIP8_FONTSET: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
+#[derive(Clone, Copy)]
 pub struct Chip8 {
     pub ram: [u8; CHIP8_RAM],
     v: [u8; 16],
