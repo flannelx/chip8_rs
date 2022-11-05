@@ -27,15 +27,15 @@ pub const CHIP8_FONTSET: [u8; 80] = [
 #[derive(Clone, Copy)]
 pub struct Chip8 {
     pub ram: [u8; CHIP8_RAM],
-    v: [u8; 16],
-    i: usize,
-    pc: usize,
-    sp: usize,
+    pub v: [u8; 16],
+    pub i: usize,
+    pub pc: usize,
+    pub sp: usize,
     pub screen: [[u8; CHIP8_SCREEN_WIDTH]; CHIP8_SCREEN_HEIGHT],
-    delay_timer: u8,
-    sound_timer: u8,
-    stack: [usize; 16],
-    keypad: [bool; 16],
+    pub delay_timer: u8,
+    pub sound_timer: u8,
+    pub stack: [usize; 16],
+    pub keypad: [bool; 16],
 }
 
 impl Chip8 {
