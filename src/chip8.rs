@@ -67,6 +67,14 @@ impl Chip8 {
         f.read(&mut self.ram[0x200..]).unwrap();
     }
 
+    pub fn load_from_bin(&mut self, content: &[u8]) -> Result<(), &str>{
+        if self.ram.len() - 0x200 < content.len() {
+            return Err("Ram from this little chip can not handle this.");
+        }
+        self.ram[0x200..(0x200 + content.len())].clone_from_slice(content);
+        Ok(())
+    }
+
     pub fn cycle(&mut self, keypad: [bool; 16]) {
         self.keypad = keypad;
         if self.delay_timer > 0 {
