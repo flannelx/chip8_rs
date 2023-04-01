@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="stylesheet" href="style.css">
+    <title>Chip8</title>
+</head>
+
+<body class="bg-black text-white">
+    <div class="w-screen h-screen grid place-items-center">
+        <div class="flex gap-2">
+            <div id="game_list_div" class="flex flex-col w-[77px]">
+            </div>
+            <canvas id="screen" class="border border-neutral-400 rounded" width="640" height="320"></canvas>
+            <p class="absolute transform translate-x-[380px] translate-y-[150px]" id="loading_p"></p>
+            <div id="ram_div"
+                class="flex flex-wrap grap-0 border border-neutral-400 rounded w-[77px] p-1 h-[320px] pointer-events-none">
+                <p class="absolute transform translate-y-[315px] text-sm">Ram</p>
+                <p class="absolute transform translate-y-[331px] text-sm">Red=PC</p>
+            </div>
+        </div>
+
+        <div
+            class="absolute flex transform translate-x-[-9rem] translate-y-[16rem] place-items-center gap-5 text-sm pointer-events-none">
+            <div>
+                <p>What you press</p>
+                <div class="grid grid-cols-4">
+                    <p class="keypad_btn">1</p>
+                    <p class="keypad_btn">2</p>
+                    <p class="keypad_btn">3</p>
+                    <p class="keypad_btn">4</p>
+                    <p class="keypad_btn">Q</p>
+                    <p class="keypad_btn">W</p>
+                    <p class="keypad_btn">E</p>
+                    <p class="keypad_btn">R</p>
+                    <p class="keypad_btn">A</p>
+                    <p class="keypad_btn">S</p>
+                    <p class="keypad_btn">D</p>
+                    <p class="keypad_btn">F</p>
+                    <p class="keypad_btn">Z</p>
+                    <p class="keypad_btn">X</p>
+                    <p class="keypad_btn">C</p>
+                    <p class="keypad_btn">V</p>
+                </div>
+            </div>
+            &rarr;
+            <div>
+                <p>What is sent</p>
+                <div class="grid grid-cols-4">
+                    <p class="keypad_btn">1</p>
+                    <p class="keypad_btn">2</p>
+                    <p class="keypad_btn">3</p>
+                    <p class="keypad_btn">C</p>
+                    <p class="keypad_btn">4</p>
+                    <p class="keypad_btn">5</p>
+                    <p class="keypad_btn">6</p>
+                    <p class="keypad_btn">D</p>
+                    <p class="keypad_btn">7</p>
+                    <p class="keypad_btn">8</p>
+                    <p class="keypad_btn">9</p>
+                    <p class="keypad_btn">E</p>
+                    <p class="keypad_btn">A</p>
+                    <p class="keypad_btn">0</p>
+                    <p class="keypad_btn">B</p>
+                    <p class="keypad_btn">F</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+    <script type="module">
+        import init, {WasmChip8} from './wasm/pkg/wasm.js';
+        await init();
+        let game_list = {
+            "Tank": "https://raw.githubusercontent.com/kripod/chip8-roms/master/games/Tank.ch8",
+            "Brick": "https://raw.githubusercontent.com/kripod/chip8-roms/master/games/Brick (Brix hack%2C 1990).ch8",
+            "Tetris": "https://raw.githubusercontent.com/kripod/chip8-roms/master/games/Tetris [Fran Dachille%2C 1991].ch8",
+            "UFO": "https://raw.githubusercontent.com/kripod/chip8-roms/master/games/UFO [Lutz V%2C 1992].ch8",
+            "Vers": "https://raw.githubusercontent.com/kripod/chip8-roms/master/games/Vers [JMN%2C 1991].ch8",
+            "Vert. Brix": "https://raw.githubusercontent.com/kripod/chip8-roms/master/games/Vertical Brix [Paul Robson%2C 1996].ch8",
+            "TicTacToe": "https://raw.githubusercontent.com/kripod/chip8-roms/master/games/Tic-Tac-Toe [David Winter].ch8",
+            "Submarine": "https://raw.githubusercontent.com/kripod/chip8-roms/master/games/Submarine [Carmelo Cortez%2C 1978].ch8",
+        }
+        //"": "https://raw.githubusercontent.com/kripod/chip8-roms/master/games/",
+        let chip = null;
+        await load_game(game_list.TicTacToe);
+
+        const game_list_div = document.getElementById('game_list_div');
+        for (const [i, name] of Object.keys(game_list).entries()) {
+            const button = document.createElement('button');
+            button.innerHTML = name;
+            button.classList.add("game_name_btn");
+            button.style.transitionDelay = `${i * 100}`;
+            button.onclick = async () => {
+                load_game(game_list[name])
+            }
+            game_list_div.appendChild(button);
+        }
+
+        let keypad = new Array(16).fill(0)
+        const PC_COLOR = "red";
+        let animate_ram = true;
+        create_ram_divs((64 * 64) / 3);
+
+        let user_keypad = ["1", "2", "3", "4", "q", "w", "e", "r", "a", "s", "d", "f", "z", "x", "c", "v"];
+
+        function run() {
+            chip.cycle(keypad);
+            drawScreenData(chip.get_screen());
+            draw_ram(chip.get_ram());
+            window.requestAnimationFrame(run);
+        }
+
+        run();
+
+
+        document.onkeypress = (e) => {
+            keypad = new Array(16).fill(0);
+            keypad[user_keypad.indexOf(String.fromCharCode(e.keyCode))] = true;
+        };
+        document.onkeyup = () => {
+            keypad = new Array(16).fill(0);
+        };
+
+
+        async function load_game(url) {
+            let loading = document.getElementById("loading_p")
+            loading.innerHTML = "loading"
+            try {
+                chip = await(WasmChip8.new(url));
+                loading.innerHTML = ""
+            } catch (e) {
+                loading.innerHTML = "Something went wrong ¯\_(ツ)_/¯"
+            }
+        }
+
+        function create_ram_divs(numDivs) {
+            const container = document.getElementById("ram_div");
+
+            for (let i = 0; i < numDivs; i++) {
+                const div = document.createElement('div');
+                div.id = `ram_div_${i}`;
+                div.style.width = "5px";
+                div.style.height = "3px";
+                if (animate_ram) {
+                    div.classList.add("transition-[2s]")
+                }
+                container.appendChild(div);
+            }
+        }
+
+        // !TODO: This is slow.
+        function draw_ram(ramData) {
+            for (let i = 0; i < (64 * 64) / 3; i++) {
+                let bg = ramData[i] !== 0 ? "white" : "";
+                if (chip.get_pc() == i) {
+                    bg = PC_COLOR;
+                }
+                const ram_div = document.getElementById(`ram_div_${i}`);
+                if (animate_ram && ram_div.style.backgroundColor === PC_COLOR) {
+                    setTimeout(() => {
+                        ram_div.style.backgroundColor = bg;
+                    }, i)
+                }
+                else {
+                    ram_div.style.backgroundColor = bg;
+                }
+            }
+        }
+
+        function drawScreenData(screenData) {
+            const canvas = document.getElementById('screen');
+            const context = canvas.getContext('2d');
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            const xs = canvasWidth / 64;
+            const ys = canvasHeight / 32;
+            const imageData = context.createImageData(canvasWidth, canvasHeight);
+            for (let y = 0; y < 32; y++) {
+                for (let x = 0; x < 64; x++) {
+                    const grayValue = screenData[y * 64 + x] == 1 ? 255 : 0;
+                    for (let scaledY = 0; scaledY < ys; scaledY++) {
+                        for (let scaledX = 0; scaledX < xs; scaledX++) {
+                            const xPos = x * 10 + scaledX;
+                            const yPos = y * 10 + scaledY;
+                            const imageDataIndex = (yPos * canvasWidth + xPos) * 4;
+                            imageData.data[imageDataIndex] = grayValue; // R
+                            imageData.data[imageDataIndex + 1] = grayValue; // G
+                            imageData.data[imageDataIndex + 2] = grayValue; // B
+                            imageData.data[imageDataIndex + 3] = 255; // A
+                        }
+                    }
+                }
+            }
+            context.putImageData(imageData, 0, 0);
+        }
+    </script>
+</body>
+
+<style>
+    .game_name_btn {
+        animation: button_slide_in 0.5s ease;
+    }
+
+    @keyframes button_slide_in {
+        from {
+            transform: scale(0.8);
+        }
+    }
+</style>
+
+</html>
